@@ -1581,6 +1581,67 @@ static CYTHON_INLINE PyObject* __Pyx_PyObject_CallMethO(PyObject *func, PyObject
 /* PyObjectCallOneArg.proto */
 static CYTHON_INLINE PyObject* __Pyx_PyObject_CallOneArg(PyObject *func, PyObject *arg);
 
+/* DictGetItem.proto */
+#if PY_MAJOR_VERSION >= 3 && !CYTHON_COMPILING_IN_PYPY
+static PyObject *__Pyx_PyDict_GetItem(PyObject *d, PyObject* key);
+#define __Pyx_PyObject_Dict_GetItem(obj, name)\
+    (likely(PyDict_CheckExact(obj)) ?\
+     __Pyx_PyDict_GetItem(obj, name) : PyObject_GetItem(obj, name))
+#else
+#define __Pyx_PyDict_GetItem(d, key) PyObject_GetItem(d, key)
+#define __Pyx_PyObject_Dict_GetItem(obj, name)  PyObject_GetItem(obj, name)
+#endif
+
+/* PyDictVersioning.proto */
+#if CYTHON_USE_DICT_VERSIONS && CYTHON_USE_TYPE_SLOTS
+#define __PYX_DICT_VERSION_INIT  ((PY_UINT64_T) -1)
+#define __PYX_GET_DICT_VERSION(dict)  (((PyDictObject*)(dict))->ma_version_tag)
+#define __PYX_UPDATE_DICT_CACHE(dict, value, cache_var, version_var)\
+    (version_var) = __PYX_GET_DICT_VERSION(dict);\
+    (cache_var) = (value);
+#define __PYX_PY_DICT_LOOKUP_IF_MODIFIED(VAR, DICT, LOOKUP) {\
+    static PY_UINT64_T __pyx_dict_version = 0;\
+    static PyObject *__pyx_dict_cached_value = NULL;\
+    if (likely(__PYX_GET_DICT_VERSION(DICT) == __pyx_dict_version)) {\
+        (VAR) = __pyx_dict_cached_value;\
+    } else {\
+        (VAR) = __pyx_dict_cached_value = (LOOKUP);\
+        __pyx_dict_version = __PYX_GET_DICT_VERSION(DICT);\
+    }\
+}
+static CYTHON_INLINE PY_UINT64_T __Pyx_get_tp_dict_version(PyObject *obj);
+static CYTHON_INLINE PY_UINT64_T __Pyx_get_object_dict_version(PyObject *obj);
+static CYTHON_INLINE int __Pyx_object_dict_version_matches(PyObject* obj, PY_UINT64_T tp_dict_version, PY_UINT64_T obj_dict_version);
+#else
+#define __PYX_GET_DICT_VERSION(dict)  (0)
+#define __PYX_UPDATE_DICT_CACHE(dict, value, cache_var, version_var)
+#define __PYX_PY_DICT_LOOKUP_IF_MODIFIED(VAR, DICT, LOOKUP)  (VAR) = (LOOKUP);
+#endif
+
+/* GetModuleGlobalName.proto */
+#if CYTHON_USE_DICT_VERSIONS
+#define __Pyx_GetModuleGlobalName(var, name)  {\
+    static PY_UINT64_T __pyx_dict_version = 0;\
+    static PyObject *__pyx_dict_cached_value = NULL;\
+    (var) = (likely(__pyx_dict_version == __PYX_GET_DICT_VERSION(__pyx_d))) ?\
+        (likely(__pyx_dict_cached_value) ? __Pyx_NewRef(__pyx_dict_cached_value) : __Pyx_GetBuiltinName(name)) :\
+        __Pyx__GetModuleGlobalName(name, &__pyx_dict_version, &__pyx_dict_cached_value);\
+}
+#define __Pyx_GetModuleGlobalNameUncached(var, name)  {\
+    PY_UINT64_T __pyx_dict_version;\
+    PyObject *__pyx_dict_cached_value;\
+    (var) = __Pyx__GetModuleGlobalName(name, &__pyx_dict_version, &__pyx_dict_cached_value);\
+}
+static PyObject *__Pyx__GetModuleGlobalName(PyObject *name, PY_UINT64_T *dict_version, PyObject **dict_cached_value);
+#else
+#define __Pyx_GetModuleGlobalName(var, name)  (var) = __Pyx__GetModuleGlobalName(name)
+#define __Pyx_GetModuleGlobalNameUncached(var, name)  (var) = __Pyx__GetModuleGlobalName(name)
+static CYTHON_INLINE PyObject *__Pyx__GetModuleGlobalName(PyObject *name);
+#endif
+
+/* ExtTypeTest.proto */
+static CYTHON_INLINE int __Pyx_TypeTest(PyObject *obj, PyTypeObject *type);
+
 /* BufferIndexError.proto */
 static void __Pyx_RaiseBufferIndexError(int axis);
 
@@ -1610,17 +1671,6 @@ static CYTHON_INLINE int __pyx_sub_acquisition_count_locked(
 static CYTHON_INLINE void __Pyx_INC_MEMVIEW(__Pyx_memviewslice *, int, int);
 static CYTHON_INLINE void __Pyx_XDEC_MEMVIEW(__Pyx_memviewslice *, int, int);
 
-/* DictGetItem.proto */
-#if PY_MAJOR_VERSION >= 3 && !CYTHON_COMPILING_IN_PYPY
-static PyObject *__Pyx_PyDict_GetItem(PyObject *d, PyObject* key);
-#define __Pyx_PyObject_Dict_GetItem(obj, name)\
-    (likely(PyDict_CheckExact(obj)) ?\
-     __Pyx_PyDict_GetItem(obj, name) : PyObject_GetItem(obj, name))
-#else
-#define __Pyx_PyDict_GetItem(d, key) PyObject_GetItem(d, key)
-#define __Pyx_PyObject_Dict_GetItem(obj, name)  PyObject_GetItem(obj, name)
-#endif
-
 /* RaiseTooManyValuesToUnpack.proto */
 static CYTHON_INLINE void __Pyx_RaiseTooManyValuesError(Py_ssize_t expected);
 
@@ -1629,9 +1679,6 @@ static CYTHON_INLINE void __Pyx_RaiseNeedMoreValuesError(Py_ssize_t index);
 
 /* RaiseNoneIterError.proto */
 static CYTHON_INLINE void __Pyx_RaiseNoneNotIterableError(void);
-
-/* ExtTypeTest.proto */
-static CYTHON_INLINE int __Pyx_TypeTest(PyObject *obj, PyTypeObject *type);
 
 /* GetTopmostException.proto */
 #if CYTHON_USE_EXC_INFO_STACK
@@ -1744,53 +1791,6 @@ static CYTHON_INLINE PyObject* __Pyx_decode_c_string(
 
 /* GetAttr3.proto */
 static CYTHON_INLINE PyObject *__Pyx_GetAttr3(PyObject *, PyObject *, PyObject *);
-
-/* PyDictVersioning.proto */
-#if CYTHON_USE_DICT_VERSIONS && CYTHON_USE_TYPE_SLOTS
-#define __PYX_DICT_VERSION_INIT  ((PY_UINT64_T) -1)
-#define __PYX_GET_DICT_VERSION(dict)  (((PyDictObject*)(dict))->ma_version_tag)
-#define __PYX_UPDATE_DICT_CACHE(dict, value, cache_var, version_var)\
-    (version_var) = __PYX_GET_DICT_VERSION(dict);\
-    (cache_var) = (value);
-#define __PYX_PY_DICT_LOOKUP_IF_MODIFIED(VAR, DICT, LOOKUP) {\
-    static PY_UINT64_T __pyx_dict_version = 0;\
-    static PyObject *__pyx_dict_cached_value = NULL;\
-    if (likely(__PYX_GET_DICT_VERSION(DICT) == __pyx_dict_version)) {\
-        (VAR) = __pyx_dict_cached_value;\
-    } else {\
-        (VAR) = __pyx_dict_cached_value = (LOOKUP);\
-        __pyx_dict_version = __PYX_GET_DICT_VERSION(DICT);\
-    }\
-}
-static CYTHON_INLINE PY_UINT64_T __Pyx_get_tp_dict_version(PyObject *obj);
-static CYTHON_INLINE PY_UINT64_T __Pyx_get_object_dict_version(PyObject *obj);
-static CYTHON_INLINE int __Pyx_object_dict_version_matches(PyObject* obj, PY_UINT64_T tp_dict_version, PY_UINT64_T obj_dict_version);
-#else
-#define __PYX_GET_DICT_VERSION(dict)  (0)
-#define __PYX_UPDATE_DICT_CACHE(dict, value, cache_var, version_var)
-#define __PYX_PY_DICT_LOOKUP_IF_MODIFIED(VAR, DICT, LOOKUP)  (VAR) = (LOOKUP);
-#endif
-
-/* GetModuleGlobalName.proto */
-#if CYTHON_USE_DICT_VERSIONS
-#define __Pyx_GetModuleGlobalName(var, name)  {\
-    static PY_UINT64_T __pyx_dict_version = 0;\
-    static PyObject *__pyx_dict_cached_value = NULL;\
-    (var) = (likely(__pyx_dict_version == __PYX_GET_DICT_VERSION(__pyx_d))) ?\
-        (likely(__pyx_dict_cached_value) ? __Pyx_NewRef(__pyx_dict_cached_value) : __Pyx_GetBuiltinName(name)) :\
-        __Pyx__GetModuleGlobalName(name, &__pyx_dict_version, &__pyx_dict_cached_value);\
-}
-#define __Pyx_GetModuleGlobalNameUncached(var, name)  {\
-    PY_UINT64_T __pyx_dict_version;\
-    PyObject *__pyx_dict_cached_value;\
-    (var) = __Pyx__GetModuleGlobalName(name, &__pyx_dict_version, &__pyx_dict_cached_value);\
-}
-static PyObject *__Pyx__GetModuleGlobalName(PyObject *name, PY_UINT64_T *dict_version, PyObject **dict_cached_value);
-#else
-#define __Pyx_GetModuleGlobalName(var, name)  (var) = __Pyx__GetModuleGlobalName(name)
-#define __Pyx_GetModuleGlobalNameUncached(var, name)  (var) = __Pyx__GetModuleGlobalName(name)
-static CYTHON_INLINE PyObject *__Pyx__GetModuleGlobalName(PyObject *name);
-#endif
 
 /* SwapException.proto */
 #if CYTHON_FAST_THREAD_STATE
@@ -2264,6 +2264,7 @@ static const char __pyx_k_test[] = "__test__";
 static const char __pyx_k_time[] = "time";
 static const char __pyx_k_ASCII[] = "ASCII";
 static const char __pyx_k_class[] = "__class__";
+static const char __pyx_k_dtype[] = "dtype";
 static const char __pyx_k_error[] = "error";
 static const char __pyx_k_flags[] = "flags";
 static const char __pyx_k_numpy[] = "numpy";
@@ -2271,6 +2272,7 @@ static const char __pyx_k_print[] = "print";
 static const char __pyx_k_range[] = "range";
 static const char __pyx_k_shape[] = "shape";
 static const char __pyx_k_start[] = "start";
+static const char __pyx_k_double[] = "double";
 static const char __pyx_k_encode[] = "encode";
 static const char __pyx_k_format[] = "format";
 static const char __pyx_k_import[] = "__import__";
@@ -2303,6 +2305,7 @@ static const char __pyx_k_BeatTracker[] = "BeatTracker";
 static const char __pyx_k_ImportError[] = "ImportError";
 static const char __pyx_k_MemoryError[] = "MemoryError";
 static const char __pyx_k_PickleError[] = "PickleError";
+static const char __pyx_k_C_CONTIGUOUS[] = "C_CONTIGUOUS";
 static const char __pyx_k_RuntimeError[] = "RuntimeError";
 static const char __pyx_k_pyx_checksum[] = "__pyx_checksum";
 static const char __pyx_k_stringsource[] = "stringsource";
@@ -2313,6 +2316,7 @@ static const char __pyx_k_allocate_buffer[] = "allocate_buffer";
 static const char __pyx_k_dtype_is_object[] = "dtype_is_object";
 static const char __pyx_k_pyx_PickleError[] = "__pyx_PickleError";
 static const char __pyx_k_setstate_cython[] = "__setstate_cython__";
+static const char __pyx_k_ascontiguousarray[] = "ascontiguousarray";
 static const char __pyx_k_audio_should_have[] = "audio should have ";
 static const char __pyx_k_pyx_unpickle_Enum[] = "__pyx_unpickle_Enum";
 static const char __pyx_k_cline_in_traceback[] = "cline_in_traceback";
@@ -2352,6 +2356,7 @@ static const char __pyx_k_Format_string_allocated_too_shor_2[] = "Format string 
 static PyObject *__pyx_n_s_ASCII;
 static PyObject *__pyx_n_s_BeatTracker;
 static PyObject *__pyx_kp_s_Buffer_view_does_not_expose_stri;
+static PyObject *__pyx_n_u_C_CONTIGUOUS;
 static PyObject *__pyx_kp_s_Can_only_create_a_buffer_that_is;
 static PyObject *__pyx_kp_s_Cannot_assign_to_read_only_memor;
 static PyObject *__pyx_kp_s_Cannot_create_writable_memory_vi;
@@ -2380,6 +2385,7 @@ static PyObject *__pyx_kp_s_Unable_to_convert_item_to_object;
 static PyObject *__pyx_n_s_ValueError;
 static PyObject *__pyx_n_s_View_MemoryView;
 static PyObject *__pyx_n_s_allocate_buffer;
+static PyObject *__pyx_n_s_ascontiguousarray;
 static PyObject *__pyx_kp_u_audio_should_have;
 static PyObject *__pyx_kp_u_audio_should_have_1_dimension;
 static PyObject *__pyx_n_s_base;
@@ -2390,6 +2396,8 @@ static PyObject *__pyx_n_s_cline_in_traceback;
 static PyObject *__pyx_kp_s_contiguous_and_direct;
 static PyObject *__pyx_kp_s_contiguous_and_indirect;
 static PyObject *__pyx_n_s_dict;
+static PyObject *__pyx_n_s_double;
+static PyObject *__pyx_n_s_dtype;
 static PyObject *__pyx_n_s_dtype_is_object;
 static PyObject *__pyx_n_s_encode;
 static PyObject *__pyx_n_s_enumerate;
@@ -2904,10 +2912,16 @@ static PyObject *__pyx_pf_6btrack_11BeatTracker_6process_audio(struct __pyx_obj_
   Py_ssize_t __pyx_t_3;
   Py_UCS4 __pyx_t_4;
   PyObject *__pyx_t_5 = NULL;
-  __Pyx_memviewslice __pyx_t_6 = { 0, 0, { 0 }, { 0 }, { 0 } };
-  Py_ssize_t __pyx_t_7;
-  int __pyx_t_8;
+  int __pyx_t_6;
+  int __pyx_t_7;
+  PyObject *__pyx_t_8 = NULL;
+  PyObject *__pyx_t_9 = NULL;
+  PyObject *__pyx_t_10 = NULL;
+  __Pyx_memviewslice __pyx_t_11 = { 0, 0, { 0 }, { 0 }, { 0 } };
+  Py_ssize_t __pyx_t_12;
+  int __pyx_t_13;
   __Pyx_RefNannySetupContext("process_audio", 0);
+  __Pyx_INCREF((PyObject *)__pyx_v_audio);
 
   /* "beat_tracker.pyx":38
  *         match the frame size that the algorithm was initialised with.
@@ -2956,7 +2970,7 @@ static PyObject *__pyx_pf_6btrack_11BeatTracker_6process_audio(struct __pyx_obj_
  *         if audio.shape[0] != self.frame_size:
  *             raise ValueError(f"audio should have {self.frame_size} samples")             # <<<<<<<<<<<<<<
  * 
- *         cdef double [::1] audio_memview = audio
+ *         if not audio.flags["C_CONTIGUOUS"] or audio.dtype != np.double:
  */
     __pyx_t_2 = PyTuple_New(3); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 41, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_2);
@@ -2998,33 +3012,113 @@ static PyObject *__pyx_pf_6btrack_11BeatTracker_6process_audio(struct __pyx_obj_
   /* "beat_tracker.pyx":43
  *             raise ValueError(f"audio should have {self.frame_size} samples")
  * 
+ *         if not audio.flags["C_CONTIGUOUS"] or audio.dtype != np.double:             # <<<<<<<<<<<<<<
+ *             audio = np.ascontiguousarray(audio, dtype=np.double)
+ * 
+ */
+  __pyx_t_2 = __Pyx_PyObject_GetAttrStr(((PyObject *)__pyx_v_audio), __pyx_n_s_flags); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 43, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_2);
+  __pyx_t_5 = __Pyx_PyObject_Dict_GetItem(__pyx_t_2, __pyx_n_u_C_CONTIGUOUS); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 43, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_5);
+  __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
+  __pyx_t_6 = __Pyx_PyObject_IsTrue(__pyx_t_5); if (unlikely(__pyx_t_6 < 0)) __PYX_ERR(0, 43, __pyx_L1_error)
+  __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+  __pyx_t_7 = ((!__pyx_t_6) != 0);
+  if (!__pyx_t_7) {
+  } else {
+    __pyx_t_1 = __pyx_t_7;
+    goto __pyx_L6_bool_binop_done;
+  }
+  __pyx_t_5 = __Pyx_PyObject_GetAttrStr(((PyObject *)__pyx_v_audio), __pyx_n_s_dtype); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 43, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_5);
+  __Pyx_GetModuleGlobalName(__pyx_t_2, __pyx_n_s_np); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 43, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_2);
+  __pyx_t_8 = __Pyx_PyObject_GetAttrStr(__pyx_t_2, __pyx_n_s_double); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 43, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_8);
+  __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
+  __pyx_t_2 = PyObject_RichCompare(__pyx_t_5, __pyx_t_8, Py_NE); __Pyx_XGOTREF(__pyx_t_2); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 43, __pyx_L1_error)
+  __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+  __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
+  __pyx_t_7 = __Pyx_PyObject_IsTrue(__pyx_t_2); if (unlikely(__pyx_t_7 < 0)) __PYX_ERR(0, 43, __pyx_L1_error)
+  __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
+  __pyx_t_1 = __pyx_t_7;
+  __pyx_L6_bool_binop_done:;
+  if (__pyx_t_1) {
+
+    /* "beat_tracker.pyx":44
+ * 
+ *         if not audio.flags["C_CONTIGUOUS"] or audio.dtype != np.double:
+ *             audio = np.ascontiguousarray(audio, dtype=np.double)             # <<<<<<<<<<<<<<
+ * 
+ *         cdef double [::1] audio_memview = audio
+ */
+    __Pyx_GetModuleGlobalName(__pyx_t_2, __pyx_n_s_np); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 44, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_2);
+    __pyx_t_8 = __Pyx_PyObject_GetAttrStr(__pyx_t_2, __pyx_n_s_ascontiguousarray); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 44, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_8);
+    __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
+    __pyx_t_2 = PyTuple_New(1); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 44, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_2);
+    __Pyx_INCREF(((PyObject *)__pyx_v_audio));
+    __Pyx_GIVEREF(((PyObject *)__pyx_v_audio));
+    PyTuple_SET_ITEM(__pyx_t_2, 0, ((PyObject *)__pyx_v_audio));
+    __pyx_t_5 = __Pyx_PyDict_NewPresized(1); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 44, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_5);
+    __Pyx_GetModuleGlobalName(__pyx_t_9, __pyx_n_s_np); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 44, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_9);
+    __pyx_t_10 = __Pyx_PyObject_GetAttrStr(__pyx_t_9, __pyx_n_s_double); if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 44, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_10);
+    __Pyx_DECREF(__pyx_t_9); __pyx_t_9 = 0;
+    if (PyDict_SetItem(__pyx_t_5, __pyx_n_s_dtype, __pyx_t_10) < 0) __PYX_ERR(0, 44, __pyx_L1_error)
+    __Pyx_DECREF(__pyx_t_10); __pyx_t_10 = 0;
+    __pyx_t_10 = __Pyx_PyObject_Call(__pyx_t_8, __pyx_t_2, __pyx_t_5); if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 44, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_10);
+    __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
+    __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
+    __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+    if (!(likely(((__pyx_t_10) == Py_None) || likely(__Pyx_TypeTest(__pyx_t_10, __pyx_ptype_5numpy_ndarray))))) __PYX_ERR(0, 44, __pyx_L1_error)
+    __Pyx_DECREF_SET(__pyx_v_audio, ((PyArrayObject *)__pyx_t_10));
+    __pyx_t_10 = 0;
+
+    /* "beat_tracker.pyx":43
+ *             raise ValueError(f"audio should have {self.frame_size} samples")
+ * 
+ *         if not audio.flags["C_CONTIGUOUS"] or audio.dtype != np.double:             # <<<<<<<<<<<<<<
+ *             audio = np.ascontiguousarray(audio, dtype=np.double)
+ * 
+ */
+  }
+
+  /* "beat_tracker.pyx":46
+ *             audio = np.ascontiguousarray(audio, dtype=np.double)
+ * 
  *         cdef double [::1] audio_memview = audio             # <<<<<<<<<<<<<<
  * 
  *         self.btrack.processAudioFrame(&audio_memview[0])
  */
-  __pyx_t_6 = __Pyx_PyObject_to_MemoryviewSlice_dc_double(((PyObject *)__pyx_v_audio), PyBUF_WRITABLE); if (unlikely(!__pyx_t_6.memview)) __PYX_ERR(0, 43, __pyx_L1_error)
-  __pyx_v_audio_memview = __pyx_t_6;
-  __pyx_t_6.memview = NULL;
-  __pyx_t_6.data = NULL;
+  __pyx_t_11 = __Pyx_PyObject_to_MemoryviewSlice_dc_double(((PyObject *)__pyx_v_audio), PyBUF_WRITABLE); if (unlikely(!__pyx_t_11.memview)) __PYX_ERR(0, 46, __pyx_L1_error)
+  __pyx_v_audio_memview = __pyx_t_11;
+  __pyx_t_11.memview = NULL;
+  __pyx_t_11.data = NULL;
 
-  /* "beat_tracker.pyx":45
+  /* "beat_tracker.pyx":48
  *         cdef double [::1] audio_memview = audio
  * 
  *         self.btrack.processAudioFrame(&audio_memview[0])             # <<<<<<<<<<<<<<
  * 
  *     def process_onset_detection_function_sample(self, double sample):
  */
-  __pyx_t_7 = 0;
-  __pyx_t_8 = -1;
-  if (__pyx_t_7 < 0) {
-    __pyx_t_7 += __pyx_v_audio_memview.shape[0];
-    if (unlikely(__pyx_t_7 < 0)) __pyx_t_8 = 0;
-  } else if (unlikely(__pyx_t_7 >= __pyx_v_audio_memview.shape[0])) __pyx_t_8 = 0;
-  if (unlikely(__pyx_t_8 != -1)) {
-    __Pyx_RaiseBufferIndexError(__pyx_t_8);
-    __PYX_ERR(0, 45, __pyx_L1_error)
+  __pyx_t_12 = 0;
+  __pyx_t_13 = -1;
+  if (__pyx_t_12 < 0) {
+    __pyx_t_12 += __pyx_v_audio_memview.shape[0];
+    if (unlikely(__pyx_t_12 < 0)) __pyx_t_13 = 0;
+  } else if (unlikely(__pyx_t_12 >= __pyx_v_audio_memview.shape[0])) __pyx_t_13 = 0;
+  if (unlikely(__pyx_t_13 != -1)) {
+    __Pyx_RaiseBufferIndexError(__pyx_t_13);
+    __PYX_ERR(0, 48, __pyx_L1_error)
   }
-  __pyx_v_self->btrack->processAudioFrame((&(*((double *) ( /* dim=0 */ ((char *) (((double *) __pyx_v_audio_memview.data) + __pyx_t_7)) )))));
+  __pyx_v_self->btrack->processAudioFrame((&(*((double *) ( /* dim=0 */ ((char *) (((double *) __pyx_v_audio_memview.data) + __pyx_t_12)) )))));
 
   /* "beat_tracker.pyx":31
  *         return self.btrack.getHopSize()
@@ -3040,17 +3134,21 @@ static PyObject *__pyx_pf_6btrack_11BeatTracker_6process_audio(struct __pyx_obj_
   __pyx_L1_error:;
   __Pyx_XDECREF(__pyx_t_2);
   __Pyx_XDECREF(__pyx_t_5);
-  __PYX_XDEC_MEMVIEW(&__pyx_t_6, 1);
+  __Pyx_XDECREF(__pyx_t_8);
+  __Pyx_XDECREF(__pyx_t_9);
+  __Pyx_XDECREF(__pyx_t_10);
+  __PYX_XDEC_MEMVIEW(&__pyx_t_11, 1);
   __Pyx_AddTraceback("btrack.BeatTracker.process_audio", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __pyx_r = NULL;
   __pyx_L0:;
   __PYX_XDEC_MEMVIEW(&__pyx_v_audio_memview, 1);
+  __Pyx_XDECREF((PyObject *)__pyx_v_audio);
   __Pyx_XGIVEREF(__pyx_r);
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
 
-/* "beat_tracker.pyx":47
+/* "beat_tracker.pyx":50
  *         self.btrack.processAudioFrame(&audio_memview[0])
  * 
  *     def process_onset_detection_function_sample(self, double sample):             # <<<<<<<<<<<<<<
@@ -3067,7 +3165,7 @@ static PyObject *__pyx_pw_6btrack_11BeatTracker_9process_onset_detection_functio
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("process_onset_detection_function_sample (wrapper)", 0);
   assert(__pyx_arg_sample); {
-    __pyx_v_sample = __pyx_PyFloat_AsDouble(__pyx_arg_sample); if (unlikely((__pyx_v_sample == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 47, __pyx_L3_error)
+    __pyx_v_sample = __pyx_PyFloat_AsDouble(__pyx_arg_sample); if (unlikely((__pyx_v_sample == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 50, __pyx_L3_error)
   }
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L3_error:;
@@ -3087,7 +3185,7 @@ static PyObject *__pyx_pf_6btrack_11BeatTracker_8process_onset_detection_functio
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("process_onset_detection_function_sample", 0);
 
-  /* "beat_tracker.pyx":49
+  /* "beat_tracker.pyx":52
  *     def process_onset_detection_function_sample(self, double sample):
  *         """Add new onset detection function sample to buffer and apply beat tracking"""
  *         self.btrack.processOnsetDetectionFunctionSample(sample)             # <<<<<<<<<<<<<<
@@ -3096,7 +3194,7 @@ static PyObject *__pyx_pf_6btrack_11BeatTracker_8process_onset_detection_functio
  */
   __pyx_v_self->btrack->processOnsetDetectionFunctionSample(__pyx_v_sample);
 
-  /* "beat_tracker.pyx":47
+  /* "beat_tracker.pyx":50
  *         self.btrack.processAudioFrame(&audio_memview[0])
  * 
  *     def process_onset_detection_function_sample(self, double sample):             # <<<<<<<<<<<<<<
@@ -3111,7 +3209,7 @@ static PyObject *__pyx_pf_6btrack_11BeatTracker_8process_onset_detection_functio
   return __pyx_r;
 }
 
-/* "beat_tracker.pyx":51
+/* "beat_tracker.pyx":54
  *         self.btrack.processOnsetDetectionFunctionSample(sample)
  * 
  *     def beat_due_in_current_frame(self) -> bool:             # <<<<<<<<<<<<<<
@@ -3139,7 +3237,7 @@ static PyObject *__pyx_pf_6btrack_11BeatTracker_10beat_due_in_current_frame(stru
   PyObject *__pyx_t_1 = NULL;
   __Pyx_RefNannySetupContext("beat_due_in_current_frame", 0);
 
-  /* "beat_tracker.pyx":53
+  /* "beat_tracker.pyx":56
  *     def beat_due_in_current_frame(self) -> bool:
  *         """Returns true if a beat should occur in the current audio frame"""
  *         return self.btrack.beatDueInCurrentFrame()             # <<<<<<<<<<<<<<
@@ -3147,13 +3245,13 @@ static PyObject *__pyx_pf_6btrack_11BeatTracker_10beat_due_in_current_frame(stru
  *     def get_current_tempo_estimate(self) -> double:
  */
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_1 = __Pyx_PyBool_FromLong(__pyx_v_self->btrack->beatDueInCurrentFrame()); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 53, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyBool_FromLong(__pyx_v_self->btrack->beatDueInCurrentFrame()); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 56, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_r = __pyx_t_1;
   __pyx_t_1 = 0;
   goto __pyx_L0;
 
-  /* "beat_tracker.pyx":51
+  /* "beat_tracker.pyx":54
  *         self.btrack.processOnsetDetectionFunctionSample(sample)
  * 
  *     def beat_due_in_current_frame(self) -> bool:             # <<<<<<<<<<<<<<
@@ -3172,7 +3270,7 @@ static PyObject *__pyx_pf_6btrack_11BeatTracker_10beat_due_in_current_frame(stru
   return __pyx_r;
 }
 
-/* "beat_tracker.pyx":55
+/* "beat_tracker.pyx":58
  *         return self.btrack.beatDueInCurrentFrame()
  * 
  *     def get_current_tempo_estimate(self) -> double:             # <<<<<<<<<<<<<<
@@ -3200,7 +3298,7 @@ static PyObject *__pyx_pf_6btrack_11BeatTracker_12get_current_tempo_estimate(str
   PyObject *__pyx_t_1 = NULL;
   __Pyx_RefNannySetupContext("get_current_tempo_estimate", 0);
 
-  /* "beat_tracker.pyx":57
+  /* "beat_tracker.pyx":60
  *     def get_current_tempo_estimate(self) -> double:
  *         """Rturns the current tempo estimate being used by the beat tracker"""
  *         return self.btrack.getCurrentTempoEstimate()             # <<<<<<<<<<<<<<
@@ -3208,13 +3306,13 @@ static PyObject *__pyx_pf_6btrack_11BeatTracker_12get_current_tempo_estimate(str
  *     def get_latest_cumulative_score_value(self) -> double:
  */
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_1 = PyFloat_FromDouble(__pyx_v_self->btrack->getCurrentTempoEstimate()); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 57, __pyx_L1_error)
+  __pyx_t_1 = PyFloat_FromDouble(__pyx_v_self->btrack->getCurrentTempoEstimate()); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 60, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_r = __pyx_t_1;
   __pyx_t_1 = 0;
   goto __pyx_L0;
 
-  /* "beat_tracker.pyx":55
+  /* "beat_tracker.pyx":58
  *         return self.btrack.beatDueInCurrentFrame()
  * 
  *     def get_current_tempo_estimate(self) -> double:             # <<<<<<<<<<<<<<
@@ -3233,7 +3331,7 @@ static PyObject *__pyx_pf_6btrack_11BeatTracker_12get_current_tempo_estimate(str
   return __pyx_r;
 }
 
-/* "beat_tracker.pyx":59
+/* "beat_tracker.pyx":62
  *         return self.btrack.getCurrentTempoEstimate()
  * 
  *     def get_latest_cumulative_score_value(self) -> double:             # <<<<<<<<<<<<<<
@@ -3261,7 +3359,7 @@ static PyObject *__pyx_pf_6btrack_11BeatTracker_14get_latest_cumulative_score_va
   PyObject *__pyx_t_1 = NULL;
   __Pyx_RefNannySetupContext("get_latest_cumulative_score_value", 0);
 
-  /* "beat_tracker.pyx":61
+  /* "beat_tracker.pyx":64
  *     def get_latest_cumulative_score_value(self) -> double:
  *         """Returns the most recent value of the cumulative score function"""
  *         return self.btrack.getLatestCumulativeScoreValue()             # <<<<<<<<<<<<<<
@@ -3269,13 +3367,13 @@ static PyObject *__pyx_pf_6btrack_11BeatTracker_14get_latest_cumulative_score_va
  *     def set_tempo(self, double tempo) -> void:
  */
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_1 = PyFloat_FromDouble(__pyx_v_self->btrack->getLatestCumulativeScoreValue()); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 61, __pyx_L1_error)
+  __pyx_t_1 = PyFloat_FromDouble(__pyx_v_self->btrack->getLatestCumulativeScoreValue()); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 64, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_r = __pyx_t_1;
   __pyx_t_1 = 0;
   goto __pyx_L0;
 
-  /* "beat_tracker.pyx":59
+  /* "beat_tracker.pyx":62
  *         return self.btrack.getCurrentTempoEstimate()
  * 
  *     def get_latest_cumulative_score_value(self) -> double:             # <<<<<<<<<<<<<<
@@ -3294,7 +3392,7 @@ static PyObject *__pyx_pf_6btrack_11BeatTracker_14get_latest_cumulative_score_va
   return __pyx_r;
 }
 
-/* "beat_tracker.pyx":63
+/* "beat_tracker.pyx":66
  *         return self.btrack.getLatestCumulativeScoreValue()
  * 
  *     def set_tempo(self, double tempo) -> void:             # <<<<<<<<<<<<<<
@@ -3311,7 +3409,7 @@ static PyObject *__pyx_pw_6btrack_11BeatTracker_17set_tempo(PyObject *__pyx_v_se
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("set_tempo (wrapper)", 0);
   assert(__pyx_arg_tempo); {
-    __pyx_v_tempo = __pyx_PyFloat_AsDouble(__pyx_arg_tempo); if (unlikely((__pyx_v_tempo == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 63, __pyx_L3_error)
+    __pyx_v_tempo = __pyx_PyFloat_AsDouble(__pyx_arg_tempo); if (unlikely((__pyx_v_tempo == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 66, __pyx_L3_error)
   }
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L3_error:;
@@ -3331,7 +3429,7 @@ static PyObject *__pyx_pf_6btrack_11BeatTracker_16set_tempo(struct __pyx_obj_6bt
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("set_tempo", 0);
 
-  /* "beat_tracker.pyx":65
+  /* "beat_tracker.pyx":68
  *     def set_tempo(self, double tempo) -> void:
  *         """Set the tempo of the beat tracker"""
  *         self.btrack.setTempo(tempo)             # <<<<<<<<<<<<<<
@@ -3340,7 +3438,7 @@ static PyObject *__pyx_pf_6btrack_11BeatTracker_16set_tempo(struct __pyx_obj_6bt
  */
   __pyx_v_self->btrack->setTempo(__pyx_v_tempo);
 
-  /* "beat_tracker.pyx":63
+  /* "beat_tracker.pyx":66
  *         return self.btrack.getLatestCumulativeScoreValue()
  * 
  *     def set_tempo(self, double tempo) -> void:             # <<<<<<<<<<<<<<
@@ -3355,7 +3453,7 @@ static PyObject *__pyx_pf_6btrack_11BeatTracker_16set_tempo(struct __pyx_obj_6bt
   return __pyx_r;
 }
 
-/* "beat_tracker.pyx":67
+/* "beat_tracker.pyx":70
  *         self.btrack.setTempo(tempo)
  * 
  *     def fix_tempo(self, double tempo) -> void:             # <<<<<<<<<<<<<<
@@ -3372,7 +3470,7 @@ static PyObject *__pyx_pw_6btrack_11BeatTracker_19fix_tempo(PyObject *__pyx_v_se
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("fix_tempo (wrapper)", 0);
   assert(__pyx_arg_tempo); {
-    __pyx_v_tempo = __pyx_PyFloat_AsDouble(__pyx_arg_tempo); if (unlikely((__pyx_v_tempo == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 67, __pyx_L3_error)
+    __pyx_v_tempo = __pyx_PyFloat_AsDouble(__pyx_arg_tempo); if (unlikely((__pyx_v_tempo == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 70, __pyx_L3_error)
   }
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L3_error:;
@@ -3392,7 +3490,7 @@ static PyObject *__pyx_pf_6btrack_11BeatTracker_18fix_tempo(struct __pyx_obj_6bt
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("fix_tempo", 0);
 
-  /* "beat_tracker.pyx":72
+  /* "beat_tracker.pyx":75
  *         tempi around the given tempo
  *         """
  *         self.btrack.fixTempo(tempo)             # <<<<<<<<<<<<<<
@@ -3401,7 +3499,7 @@ static PyObject *__pyx_pf_6btrack_11BeatTracker_18fix_tempo(struct __pyx_obj_6bt
  */
   __pyx_v_self->btrack->fixTempo(__pyx_v_tempo);
 
-  /* "beat_tracker.pyx":67
+  /* "beat_tracker.pyx":70
  *         self.btrack.setTempo(tempo)
  * 
  *     def fix_tempo(self, double tempo) -> void:             # <<<<<<<<<<<<<<
@@ -3416,7 +3514,7 @@ static PyObject *__pyx_pf_6btrack_11BeatTracker_18fix_tempo(struct __pyx_obj_6bt
   return __pyx_r;
 }
 
-/* "beat_tracker.pyx":74
+/* "beat_tracker.pyx":77
  *         self.btrack.fixTempo(tempo)
  * 
  *     def do_not_fix_tempo(self) -> void:             # <<<<<<<<<<<<<<
@@ -3443,14 +3541,14 @@ static PyObject *__pyx_pf_6btrack_11BeatTracker_20do_not_fix_tempo(struct __pyx_
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("do_not_fix_tempo", 0);
 
-  /* "beat_tracker.pyx":76
+  /* "beat_tracker.pyx":79
  *     def do_not_fix_tempo(self) -> void:
  *         """Tell the algorithm to not fix the tempo anymore"""
  *         self.btrack.doNotFixTempo()             # <<<<<<<<<<<<<<
  */
   __pyx_v_self->btrack->doNotFixTempo();
 
-  /* "beat_tracker.pyx":74
+  /* "beat_tracker.pyx":77
  *         self.btrack.fixTempo(tempo)
  * 
  *     def do_not_fix_tempo(self) -> void:             # <<<<<<<<<<<<<<
@@ -19686,6 +19784,7 @@ static __Pyx_StringTabEntry __pyx_string_tab[] = {
   {&__pyx_n_s_ASCII, __pyx_k_ASCII, sizeof(__pyx_k_ASCII), 0, 0, 1, 1},
   {&__pyx_n_s_BeatTracker, __pyx_k_BeatTracker, sizeof(__pyx_k_BeatTracker), 0, 0, 1, 1},
   {&__pyx_kp_s_Buffer_view_does_not_expose_stri, __pyx_k_Buffer_view_does_not_expose_stri, sizeof(__pyx_k_Buffer_view_does_not_expose_stri), 0, 0, 1, 0},
+  {&__pyx_n_u_C_CONTIGUOUS, __pyx_k_C_CONTIGUOUS, sizeof(__pyx_k_C_CONTIGUOUS), 0, 1, 0, 1},
   {&__pyx_kp_s_Can_only_create_a_buffer_that_is, __pyx_k_Can_only_create_a_buffer_that_is, sizeof(__pyx_k_Can_only_create_a_buffer_that_is), 0, 0, 1, 0},
   {&__pyx_kp_s_Cannot_assign_to_read_only_memor, __pyx_k_Cannot_assign_to_read_only_memor, sizeof(__pyx_k_Cannot_assign_to_read_only_memor), 0, 0, 1, 0},
   {&__pyx_kp_s_Cannot_create_writable_memory_vi, __pyx_k_Cannot_create_writable_memory_vi, sizeof(__pyx_k_Cannot_create_writable_memory_vi), 0, 0, 1, 0},
@@ -19714,6 +19813,7 @@ static __Pyx_StringTabEntry __pyx_string_tab[] = {
   {&__pyx_n_s_ValueError, __pyx_k_ValueError, sizeof(__pyx_k_ValueError), 0, 0, 1, 1},
   {&__pyx_n_s_View_MemoryView, __pyx_k_View_MemoryView, sizeof(__pyx_k_View_MemoryView), 0, 0, 1, 1},
   {&__pyx_n_s_allocate_buffer, __pyx_k_allocate_buffer, sizeof(__pyx_k_allocate_buffer), 0, 0, 1, 1},
+  {&__pyx_n_s_ascontiguousarray, __pyx_k_ascontiguousarray, sizeof(__pyx_k_ascontiguousarray), 0, 0, 1, 1},
   {&__pyx_kp_u_audio_should_have, __pyx_k_audio_should_have, sizeof(__pyx_k_audio_should_have), 0, 1, 0, 0},
   {&__pyx_kp_u_audio_should_have_1_dimension, __pyx_k_audio_should_have_1_dimension, sizeof(__pyx_k_audio_should_have_1_dimension), 0, 1, 0, 0},
   {&__pyx_n_s_base, __pyx_k_base, sizeof(__pyx_k_base), 0, 0, 1, 1},
@@ -19724,6 +19824,8 @@ static __Pyx_StringTabEntry __pyx_string_tab[] = {
   {&__pyx_kp_s_contiguous_and_direct, __pyx_k_contiguous_and_direct, sizeof(__pyx_k_contiguous_and_direct), 0, 0, 1, 0},
   {&__pyx_kp_s_contiguous_and_indirect, __pyx_k_contiguous_and_indirect, sizeof(__pyx_k_contiguous_and_indirect), 0, 0, 1, 0},
   {&__pyx_n_s_dict, __pyx_k_dict, sizeof(__pyx_k_dict), 0, 0, 1, 1},
+  {&__pyx_n_s_double, __pyx_k_double, sizeof(__pyx_k_double), 0, 0, 1, 1},
+  {&__pyx_n_s_dtype, __pyx_k_dtype, sizeof(__pyx_k_dtype), 0, 0, 1, 1},
   {&__pyx_n_s_dtype_is_object, __pyx_k_dtype_is_object, sizeof(__pyx_k_dtype_is_object), 0, 0, 1, 1},
   {&__pyx_n_s_encode, __pyx_k_encode, sizeof(__pyx_k_encode), 0, 0, 1, 1},
   {&__pyx_n_s_enumerate, __pyx_k_enumerate, sizeof(__pyx_k_enumerate), 0, 0, 1, 1},
@@ -21656,6 +21758,104 @@ static CYTHON_INLINE PyObject* __Pyx_PyObject_CallOneArg(PyObject *func, PyObjec
 }
 #endif
 
+/* DictGetItem */
+#if PY_MAJOR_VERSION >= 3 && !CYTHON_COMPILING_IN_PYPY
+static PyObject *__Pyx_PyDict_GetItem(PyObject *d, PyObject* key) {
+    PyObject *value;
+    value = PyDict_GetItemWithError(d, key);
+    if (unlikely(!value)) {
+        if (!PyErr_Occurred()) {
+            if (unlikely(PyTuple_Check(key))) {
+                PyObject* args = PyTuple_Pack(1, key);
+                if (likely(args)) {
+                    PyErr_SetObject(PyExc_KeyError, args);
+                    Py_DECREF(args);
+                }
+            } else {
+                PyErr_SetObject(PyExc_KeyError, key);
+            }
+        }
+        return NULL;
+    }
+    Py_INCREF(value);
+    return value;
+}
+#endif
+
+/* PyDictVersioning */
+#if CYTHON_USE_DICT_VERSIONS && CYTHON_USE_TYPE_SLOTS
+static CYTHON_INLINE PY_UINT64_T __Pyx_get_tp_dict_version(PyObject *obj) {
+    PyObject *dict = Py_TYPE(obj)->tp_dict;
+    return likely(dict) ? __PYX_GET_DICT_VERSION(dict) : 0;
+}
+static CYTHON_INLINE PY_UINT64_T __Pyx_get_object_dict_version(PyObject *obj) {
+    PyObject **dictptr = NULL;
+    Py_ssize_t offset = Py_TYPE(obj)->tp_dictoffset;
+    if (offset) {
+#if CYTHON_COMPILING_IN_CPYTHON
+        dictptr = (likely(offset > 0)) ? (PyObject **) ((char *)obj + offset) : _PyObject_GetDictPtr(obj);
+#else
+        dictptr = _PyObject_GetDictPtr(obj);
+#endif
+    }
+    return (dictptr && *dictptr) ? __PYX_GET_DICT_VERSION(*dictptr) : 0;
+}
+static CYTHON_INLINE int __Pyx_object_dict_version_matches(PyObject* obj, PY_UINT64_T tp_dict_version, PY_UINT64_T obj_dict_version) {
+    PyObject *dict = Py_TYPE(obj)->tp_dict;
+    if (unlikely(!dict) || unlikely(tp_dict_version != __PYX_GET_DICT_VERSION(dict)))
+        return 0;
+    return obj_dict_version == __Pyx_get_object_dict_version(obj);
+}
+#endif
+
+/* GetModuleGlobalName */
+#if CYTHON_USE_DICT_VERSIONS
+static PyObject *__Pyx__GetModuleGlobalName(PyObject *name, PY_UINT64_T *dict_version, PyObject **dict_cached_value)
+#else
+static CYTHON_INLINE PyObject *__Pyx__GetModuleGlobalName(PyObject *name)
+#endif
+{
+    PyObject *result;
+#if !CYTHON_AVOID_BORROWED_REFS
+#if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030500A1
+    result = _PyDict_GetItem_KnownHash(__pyx_d, name, ((PyASCIIObject *) name)->hash);
+    __PYX_UPDATE_DICT_CACHE(__pyx_d, result, *dict_cached_value, *dict_version)
+    if (likely(result)) {
+        return __Pyx_NewRef(result);
+    } else if (unlikely(PyErr_Occurred())) {
+        return NULL;
+    }
+#else
+    result = PyDict_GetItem(__pyx_d, name);
+    __PYX_UPDATE_DICT_CACHE(__pyx_d, result, *dict_cached_value, *dict_version)
+    if (likely(result)) {
+        return __Pyx_NewRef(result);
+    }
+#endif
+#else
+    result = PyObject_GetItem(__pyx_d, name);
+    __PYX_UPDATE_DICT_CACHE(__pyx_d, result, *dict_cached_value, *dict_version)
+    if (likely(result)) {
+        return __Pyx_NewRef(result);
+    }
+    PyErr_Clear();
+#endif
+    return __Pyx_GetBuiltinName(name);
+}
+
+/* ExtTypeTest */
+static CYTHON_INLINE int __Pyx_TypeTest(PyObject *obj, PyTypeObject *type) {
+    if (unlikely(!type)) {
+        PyErr_SetString(PyExc_SystemError, "Missing type object");
+        return 0;
+    }
+    if (likely(__Pyx_TypeCheck(obj, type)))
+        return 1;
+    PyErr_Format(PyExc_TypeError, "Cannot convert %.200s to %.200s",
+                 Py_TYPE(obj)->tp_name, type->tp_name);
+    return 0;
+}
+
 /* BufferIndexError */
 static void __Pyx_RaiseBufferIndexError(int axis) {
   PyErr_Format(PyExc_IndexError,
@@ -21796,30 +21996,6 @@ static CYTHON_INLINE void __Pyx_XDEC_MEMVIEW(__Pyx_memviewslice *memslice,
     }
 }
 
-/* DictGetItem */
-#if PY_MAJOR_VERSION >= 3 && !CYTHON_COMPILING_IN_PYPY
-static PyObject *__Pyx_PyDict_GetItem(PyObject *d, PyObject* key) {
-    PyObject *value;
-    value = PyDict_GetItemWithError(d, key);
-    if (unlikely(!value)) {
-        if (!PyErr_Occurred()) {
-            if (unlikely(PyTuple_Check(key))) {
-                PyObject* args = PyTuple_Pack(1, key);
-                if (likely(args)) {
-                    PyErr_SetObject(PyExc_KeyError, args);
-                    Py_DECREF(args);
-                }
-            } else {
-                PyErr_SetObject(PyExc_KeyError, key);
-            }
-        }
-        return NULL;
-    }
-    Py_INCREF(value);
-    return value;
-}
-#endif
-
 /* RaiseTooManyValuesToUnpack */
 static CYTHON_INLINE void __Pyx_RaiseTooManyValuesError(Py_ssize_t expected) {
     PyErr_Format(PyExc_ValueError,
@@ -21836,19 +22012,6 @@ static CYTHON_INLINE void __Pyx_RaiseNeedMoreValuesError(Py_ssize_t index) {
 /* RaiseNoneIterError */
 static CYTHON_INLINE void __Pyx_RaiseNoneNotIterableError(void) {
     PyErr_SetString(PyExc_TypeError, "'NoneType' object is not iterable");
-}
-
-/* ExtTypeTest */
-static CYTHON_INLINE int __Pyx_TypeTest(PyObject *obj, PyTypeObject *type) {
-    if (unlikely(!type)) {
-        PyErr_SetString(PyExc_SystemError, "Missing type object");
-        return 0;
-    }
-    if (likely(__Pyx_TypeCheck(obj, type)))
-        return 1;
-    PyErr_Format(PyExc_TypeError, "Cannot convert %.200s to %.200s",
-                 Py_TYPE(obj)->tp_name, type->tp_name);
-    return 0;
 }
 
 /* GetTopmostException */
@@ -22367,67 +22530,6 @@ static PyObject *__Pyx_GetAttr3Default(PyObject *d) {
 static CYTHON_INLINE PyObject *__Pyx_GetAttr3(PyObject *o, PyObject *n, PyObject *d) {
     PyObject *r = __Pyx_GetAttr(o, n);
     return (likely(r)) ? r : __Pyx_GetAttr3Default(d);
-}
-
-/* PyDictVersioning */
-#if CYTHON_USE_DICT_VERSIONS && CYTHON_USE_TYPE_SLOTS
-static CYTHON_INLINE PY_UINT64_T __Pyx_get_tp_dict_version(PyObject *obj) {
-    PyObject *dict = Py_TYPE(obj)->tp_dict;
-    return likely(dict) ? __PYX_GET_DICT_VERSION(dict) : 0;
-}
-static CYTHON_INLINE PY_UINT64_T __Pyx_get_object_dict_version(PyObject *obj) {
-    PyObject **dictptr = NULL;
-    Py_ssize_t offset = Py_TYPE(obj)->tp_dictoffset;
-    if (offset) {
-#if CYTHON_COMPILING_IN_CPYTHON
-        dictptr = (likely(offset > 0)) ? (PyObject **) ((char *)obj + offset) : _PyObject_GetDictPtr(obj);
-#else
-        dictptr = _PyObject_GetDictPtr(obj);
-#endif
-    }
-    return (dictptr && *dictptr) ? __PYX_GET_DICT_VERSION(*dictptr) : 0;
-}
-static CYTHON_INLINE int __Pyx_object_dict_version_matches(PyObject* obj, PY_UINT64_T tp_dict_version, PY_UINT64_T obj_dict_version) {
-    PyObject *dict = Py_TYPE(obj)->tp_dict;
-    if (unlikely(!dict) || unlikely(tp_dict_version != __PYX_GET_DICT_VERSION(dict)))
-        return 0;
-    return obj_dict_version == __Pyx_get_object_dict_version(obj);
-}
-#endif
-
-/* GetModuleGlobalName */
-#if CYTHON_USE_DICT_VERSIONS
-static PyObject *__Pyx__GetModuleGlobalName(PyObject *name, PY_UINT64_T *dict_version, PyObject **dict_cached_value)
-#else
-static CYTHON_INLINE PyObject *__Pyx__GetModuleGlobalName(PyObject *name)
-#endif
-{
-    PyObject *result;
-#if !CYTHON_AVOID_BORROWED_REFS
-#if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030500A1
-    result = _PyDict_GetItem_KnownHash(__pyx_d, name, ((PyASCIIObject *) name)->hash);
-    __PYX_UPDATE_DICT_CACHE(__pyx_d, result, *dict_cached_value, *dict_version)
-    if (likely(result)) {
-        return __Pyx_NewRef(result);
-    } else if (unlikely(PyErr_Occurred())) {
-        return NULL;
-    }
-#else
-    result = PyDict_GetItem(__pyx_d, name);
-    __PYX_UPDATE_DICT_CACHE(__pyx_d, result, *dict_cached_value, *dict_version)
-    if (likely(result)) {
-        return __Pyx_NewRef(result);
-    }
-#endif
-#else
-    result = PyObject_GetItem(__pyx_d, name);
-    __PYX_UPDATE_DICT_CACHE(__pyx_d, result, *dict_cached_value, *dict_version)
-    if (likely(result)) {
-        return __Pyx_NewRef(result);
-    }
-    PyErr_Clear();
-#endif
-    return __Pyx_GetBuiltinName(name);
 }
 
 /* SwapException */

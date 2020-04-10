@@ -39,6 +39,9 @@ cdef class BeatTracker(object):
             raise ValueError("audio should have 1 dimension")
         if audio.shape[0] != self.frame_size:
             raise ValueError(f"audio should have {self.frame_size} samples")
+
+        if not audio.flags["C_CONTIGUOUS"] or audio.dtype != np.double:
+            audio = np.ascontiguousarray(audio, dtype=np.double)
         
         cdef double [::1] audio_memview = audio
 
